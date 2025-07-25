@@ -196,7 +196,8 @@
   <script>
     const grid = document.getElementById('achievements-grid');
     const achievementFiles = [
-      'achievements/max.json'
+      'achievements/max.json',
+      'achievements/josh.json'
     ];
 
     Promise.all(achievementFiles.map(file => fetch(file).then(res => res.json())))
