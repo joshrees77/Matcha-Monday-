@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <script type="module">
+    import {pipeline} from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.7.1';
+
+    const ring = [
+      {
+        url: "https://maxbo.me",
+        name: "Max Bo",
+        feed: "https://maxbo.me/atom.xml",
+      },
+      {
+        url: "https://liamzebedee.com",
+        name: "Liam Zebedee",
+        feed: "https://liamzebedee.com/index.xml",
+      },
+      {
+        url: "https://borretti.me",
+        name: "Fernando Borretti",
+        feed: "https://borretti.me/feed.xml",
+      },
+      {
+        url: "https://ethansmith2000.com",
+        name: "Ethan Smith",
+        feed: "https://www.ethansmith2000.com/blog-feed.xml",
+      },
+      {
+        url: "https://tomlister.net",
+        name: "Tom Lister",
+        feed: "https://tomlister.net/feed.xml",
+      },
+    ];
+
+    const proxyURL = "https://tomlister--95ced61c6f4c11f0bd4b0224a6c84d84.web.val.run/?feed=";
+
+    let embedder = null;
+    let isLoadingModel = false;
+    let loadingTimer = null;
+    let loadingStartTime = null;
+
+    const availableModels = [
+      {id: 'Xenova/all-MiniLM-L6-v2', name: 'MiniLM L6 v2 (Fast, Small)', size: '~23MB'},
+      {id: 'Xenova/all-mpnet-base-v2', name: 'MPNet Base v2 (Better Quality)', size: '~438MB'},
+      {id: 'Xenova/bge-small-en-v1.5', name: 'BGE Small (Balanced)', size: '~133MB'},
+      {id: 'Xenova/sentence-transformers-all-MiniLM-L6-v2', name: 'Sentence Transformers MiniLM', size: '~91MB'}
+    ];
+
+    const initEmbeddings = async (modelId = 'Xenova/all-MiniLM-L6-v2') => {
+      if (embedder && embedder.model && embedder.model.config.name_or_path === modelId) {
+        console.log("Same model already loaded");
+        return embedder;
+      }
+
+      if (isLoadingModel) {
+        console.log("Model loading in progress...");
+        return null;
+      }
+
+      if (embedder) {
+        console.log("Clearing previous model...");
+        embedder = null;
+        window.embedder = null;
+      }
+
+      isLoadingModel = true;
+      loadingStartTime = Date.now();
+
+      const updateTimer = () => {
+        const elapsed = Math.floor((Date.now() - loadingStartTime) / 1000);
+        const statusDiv = document.getElementById('status');
+        if (statusDiv && !statusDiv.textContent.includes('Downloading')) {
+          statusDiv.textContent = `Loading model: ${elapsed}s`;
+        }
+      };
+
+      loadingTimer = setInterval(updateTimer, 1000);
+      updateTimer();
+
+      try {
+        console.log(`Loading embedding model: ${modelId}`);
+        embedder = await pipeline('feature-extraction', modelId, {
+          dtype: 'q8',
+          progress_callback: (progress) => {
+            const elapsed = Math.floor((Date.now() - loadingStartTime) / 1000);
+            const statusDiv = document.getElementById('status');
+            if (progress.status === 'download') {
+              if (statusDiv) {
+                statusDiv.textContent = `Downloading ${progress.name}: ${elapsed}s`;
+              }
+            }
+          }
+        });
+        window.embedder = embedder;
+        console.log(`Embedding model loaded: ${modelId}`);
+        return embedder;
+      } finally {
+        isLoadingModel = false;
+        if (loadingTimer) {
+          clearInterval(loadingTimer);
+          loadingTimer = null;
+        }
+      }
+    };
+
+    const getFeedProxy = async ({feed, name}) => {
+      const response = await fetch(proxyURL + feed);
+      const text = await response.text();
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(text, "application/xml");
+      return await parseFeed(xml, name);
+    }
+
+    const parseFeed = async (xml, authorName) => {
+      const isAtom = xml.querySelector("feed") || xml.querySelector("entry");
+      const isRSS = xml.querySelector("rss") || xml.querySelector("item");
+
+      let items;
+      if (isAtom) {
+        items = xml.querySelectorAll("entry");
+        console.log(`Processing Atom feed for ${authorName}...`);
+      } else if (isRSS) {
+        items = xml.querySelectorAll("item");
+        console.log(`Processing RSS feed for ${authorName}...`);
+      } else {
+        console.warn(`Unknown feed format for ${authorName}, trying both entry and item selectors...`);
+        items = xml.querySelectorAll("entry, item");
+      }
+
+      const results = [];
+      const maxItems = 15;
+
+      const itemsToProcess = Array.from(items).slice(0, maxItems);
+
+      console.log(`Processing ${itemsToProcess.length} items from feed for ${authorName}...`);
+
+      for (const item of itemsToProcess) {
+        let title, description, link;
+
+        if (isAtom) {
+          title = item.querySelector("title")?.textContent || "";
+          description = item.querySelector("summary")?.textContent ||
+            item.querySelector("content")?.textContent || "";
+          const linkEl = item.querySelector("link");
+          if (linkEl) {
+            link = linkEl.getAttribute("href") || linkEl.textContent || "";
+          } else {
+            link = "";
+          }
+        } else {
+          title = item.querySelector("title")?.textContent || "";
+          description = item.querySelector("description")?.textContent || "";
+          link = item.querySelector("link")?.textContent || "";
+        }
+
+        if (!title.trim()) continue;
+
+        console.log("Processing:", title.substring(0, 60) + "...");
+
+        let embedding = null;
+        const currentEmbedder = embedder || window.embedder;
+        if (currentEmbedder && title) {
+          try {
+            const textToEmbed = (title + " " + description).substring(0, 1000);
+            const embeddingResult = await currentEmbedder(textToEmbed, {
+              pooling: 'mean',
+              normalize: true
+            });
+            embedding = Array.from(embeddingResult.data);
+          } catch (error) {
+            console.error("Failed to generate embedding for:", title.substring(0, 40), error);
+            throw error;
+          }
+        } else {
+          throw new Error("Embedding model not available!");
+        }
+
+        results.push({
+          title,
+          description: description.substring(0, 300),
+          link,
+          embedding,
+          author: authorName
+        });
+      }
+
+      console.log(`Processed ${results.length} items with embeddings`);
+      return results;
+    }
+
+    const getFeeds = async () => {
+      const feeds = await Promise.all(ring.map(author => getFeedProxy({feed: author.feed, name: author.name})));
+      return feeds.flat();
+    }
+
+    const cosineSimilarity = (a, b) => {
+      const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+      const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+      const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+      return dotProduct / (magnitudeA * magnitudeB);
+    };
+
+    const searchItems = async (query, items, topK = 5) => {
+      const currentEmbedder = embedder || window.embedder;
+
+      if (!currentEmbedder) {
+        throw new Error("Embedding model not loaded! Cannot perform semantic search.");
+      }
+
+      if (!query.trim()) return [];
+
+      console.log(`Searching for: "${query}"`);
+
+      const queryEmbedding = await currentEmbedder(query, {pooling: 'mean', normalize: true});
+      const queryVector = Array.from(queryEmbedding.data);
+
+      const results = items
+        .filter(item => item.embedding)
+        .map(item => ({
+          ...item,
+          similarity: (cosineSimilarity || window.cosineSimilarity)(queryVector, item.embedding)
+        }))
+        .sort((a, b) => b.similarity - a.similarity)
+        .slice(0, topK);
+
+      console.log(`Found ${results.length} results`);
+      return results;
+    };
+
+    let allFeedItems = [];
+
+    window.searchItems = searchItems;
+    window.allFeedItems = allFeedItems;
+    window.cosineSimilarity = cosineSimilarity;
+    window.availableModels = availableModels;
+    window.initEmbeddings = initEmbeddings;
+    window.getFeeds = getFeeds;
+
+    const populateModelSelect = () => {
+      const modelSelect = document.getElementById('modelSelect');
+      modelSelect.innerHTML = '';
+
+      window.availableModels.forEach(model => {
+        const option = document.createElement('option');
+        option.value = model.id;
+        option.textContent = `${model.name} (${model.size})`;
+        modelSelect.appendChild(option);
+      });
+    };
+
+    const main = async () => {
+      const statusDiv = document.getElementById('status');
+      const searchInput = document.getElementById('searchInput');
+      const searchButton = document.getElementById('searchButton');
+      const modelSelect = document.getElementById('modelSelect');
+
+      populateModelSelect();
+
+      window.handleModelChange();
+
+      try {
+        const selectedModel = modelSelect.value;
+        statusDiv.textContent = `Loading embedding model: ${selectedModel}...`;
+        statusDiv.style.background = "#e3f2fd";
+
+        await initEmbeddings(selectedModel);
+
+        statusDiv.textContent = "Processing feeds...";
+        statusDiv.style.background = "#f3e5f5";
+
+        console.log("Fetching feeds...");
+        allFeedItems = await getFeeds();
+        window.allFeedItems = allFeedItems;
+        console.log(`Processed ${allFeedItems.length} blog posts.`);
+
+        statusDiv.textContent = `Ready. Loaded ${allFeedItems.length} blog posts.`;
+        statusDiv.style.background = "#d4edda";
+        searchInput.disabled = false;
+        searchButton.disabled = false;
+        searchInput.placeholder = "Search blog posts...";
+        searchInput.focus();
+
+      } catch (error) {
+        console.error("Error in main:", error);
+        statusDiv.textContent = "Failed to load embedding model. Check console for details.";
+        statusDiv.style.background = "#f8d7da";
+      }
+    };
+
+    document.addEventListener("DOMContentLoaded", () => {
+      main();
+    })
+  </script>
+</head>
+
+<body>
+  <div style="position: relative;">
+    <h1>matcha search</h1>
+    <p style="margin: 5px 0 15px 0; color: #666; font-size: 16px;">semantically searches the collective knowledge of the
+      <a href="https://matchamonday.net">matcha monday</a> webring
+    </p>
+    <div style="position: absolute; top: 0; right: 0; display: flex; align-items: center; gap: 10px;">
+      <label for="modelSelect" style="font-weight: bold; font-size: 14px;">Model:</label>
+      <select id="modelSelect" style="padding: 6px; font-size: 14px;" onchange="handleModelChange()">
+      </select>
+      <button onclick="reloadModel()" style="padding: 6px 12px; font-size: 14px;" id="reloadButton">Load</button>
+    </div>
+  </div>
+  <div id="status" style="margin: 10px 0; padding: 10px; background: #e3f2fd; border-radius: 4px;">
+    Loading embedding model...
+  </div>
+  <div>
+    <input type="text" id="searchInput" placeholder="Loading..." style="width: 400px; padding: 10px; font-size: 16px;"
+      disabled>
+    <button onclick="performSearch()" style="padding: 10px 20px; font-size: 16px;" disabled
+      id="searchButton">Search</button>
+  </div>
+  <div id="results" style="margin-top: 20px;"></div>
+
+  <script>
+    window.handleModelChange = () => {
+      const modelSelect = document.getElementById('modelSelect');
+      const reloadButton = document.getElementById('reloadButton');
+      const selectedModel = window.availableModels.find(m => m.id === modelSelect.value);
+
+      if (selectedModel) {
+        reloadButton.textContent = `Load`;
+      }
+    };
+
+    window.reloadModel = async () => {
+      const statusDiv = document.getElementById('status');
+      const searchInput = document.getElementById('searchInput');
+      const searchButton = document.getElementById('searchButton');
+      const modelSelect = document.getElementById('modelSelect');
+      const reloadButton = document.getElementById('reloadButton');
+
+      searchInput.disabled = true;
+      searchButton.disabled = true;
+      reloadButton.disabled = true;
+
+      window.allFeedItems = [];
+
+      try {
+        const selectedModel = modelSelect.value;
+        statusDiv.textContent = `Loading embedding model: ${selectedModel}...`;
+        statusDiv.style.background = "#e3f2fd";
+
+        await initEmbeddings(selectedModel);
+
+        statusDiv.textContent = "Processing feeds with new model...";
+        statusDiv.style.background = "#f3e5f5";
+
+        const newFeedItems = await getFeeds();
+        window.allFeedItems = newFeedItems;
+
+        statusDiv.textContent = `Ready. Loaded ${newFeedItems.length} blog posts with ${selectedModel}.`;
+        statusDiv.style.background = "#d4edda";
+        searchInput.disabled = false;
+        searchButton.disabled = false;
+        searchInput.placeholder = "Search blog posts...";
+        searchInput.focus();
+
+      } catch (error) {
+        console.error("Error loading model:", error);
+        statusDiv.textContent = "Failed to load model. Check console for details.";
+        statusDiv.style.background = "#f8d7da";
+      } finally {
+        reloadButton.disabled = false;
+      }
+    };
+
+    window.performSearch = async () => {
+      const query = document.getElementById('searchInput').value;
+      if (!query.trim()) return;
+
+      const resultsDiv = document.getElementById('results');
+      resultsDiv.innerHTML = '<p>Searching...</p>';
+
+      try {
+        console.log('Searching for:', query);
+        console.log('Available items:', window.allFeedItems?.length);
+        console.log('Embedder available:', !!window.embedder);
+
+        const results = await window.searchItems(query, window.allFeedItems);
+
+        if (results.length === 0) {
+          resultsDiv.innerHTML = '<p>No results found.</p>';
+          return;
+        }
+
+        const threshold = 0.30;
+        const highQualityResults = results.filter(item => item.similarity >= threshold);
+        const lowQualityResults = results.filter(item => item.similarity < threshold);
+
+        const renderResults = (items, showSimilarity = true) => {
+          return items.map(item => `
+              <div style="border: 1px solid #ccc; margin: 10px 0; padding: 15px; border-radius: 8px;">
+                <h3><a href="${item.link}" target="_blank">${item.title}</a></h3>
+                <p style="margin: 8px 0; color: #666;"><strong>By ${item.author}</strong></p>
+                <p>${item.description || 'No description available'}</p>
+                ${showSimilarity ? `<small>Similarity: ${(item.similarity * 100).toFixed(1)}%</small>` : ''}
+              </div>
+            `).join('');
+        };
+
+        let html = '';
+        if (highQualityResults.length > 0) {
+          html += renderResults(highQualityResults);
+        } else {
+          html += '<p>No high-confidence results found.</p>';
+        }
+
+        if (lowQualityResults.length > 0) {
+          html += `
+              <div id="showMoreContainer" style="text-align: center; margin: 20px 0;">
+                <button id="showMoreBtn" onclick="toggleLowQualityResults()" 
+                        style="padding: 8px 16px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 4px; cursor: pointer;">
+                  Show ${lowQualityResults.length} more result${lowQualityResults.length > 1 ? 's' : ''} (lower similarity)
+                </button>
+              </div>
+              <div id="lowQualityResults" style="display: none;">
+                ${renderResults(lowQualityResults)}
+              </div>
+            `;
+        }
+
+        resultsDiv.innerHTML = html;
+
+      } catch (error) {
+        resultsDiv.innerHTML = '<p>Search error. Check console for details.</p>';
+        console.error('Search error:', error);
+      }
+    };
+
+    window.toggleLowQualityResults = () => {
+      const lowQualityDiv = document.getElementById('lowQualityResults');
+      const showMoreBtn = document.getElementById('showMoreBtn');
+
+      if (lowQualityDiv.style.display === 'none') {
+        lowQualityDiv.style.display = 'block';
+        showMoreBtn.textContent = 'Hide lower similarity results';
+      } else {
+        lowQualityDiv.style.display = 'none';
+        const hiddenCount = lowQualityDiv.children.length;
+        showMoreBtn.textContent = `Show ${hiddenCount} more result${hiddenCount > 1 ? 's' : ''} (lower similarity)`;
+      }
+    };
+
+    document.getElementById('searchInput').addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        performSearch();
+      }
+    });
+  </script>
+</body>
+
+</html>
