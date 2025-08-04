@@ -33,6 +33,9 @@ const RING = [
     url: "https://samisgrove.com",
     name: "Sam Isgrove",
     feed: "https://samisgrove.com/feed.xml"
+  }, {
+    url: "https://home.rayzhu.me",
+    name: "Ray Zhu",
   },
 ];
 
