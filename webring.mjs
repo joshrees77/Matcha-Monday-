@@ -18,7 +18,7 @@ const RING = [
     feed: "https://liamzebedee.com/index.xml"
   },
   {
-    url: "https://borretti.me",
+    url: "https://borretti.me/about",
     name: "Fernando Borretti",
     feed: "https://borretti.me/feed.xml"
   },{
