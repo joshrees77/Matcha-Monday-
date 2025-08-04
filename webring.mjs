@@ -18,7 +18,7 @@ const RING = [
     feed: "https://liamzebedee.com/index.xml"
   },
   {
-    url: "https://borretti.me",
+    url: "https://borretti.me/about",
     name: "Fernando Borretti",
     feed: "https://borretti.me/feed.xml"
   },{
@@ -29,7 +29,14 @@ const RING = [
     url: "https://tomlister.net",
     name: "Tom Lister",
     feed: "https://tomlister.net/feed.xml"
-  }
+  }, {
+    url: "https://samisgrove.com",
+    name: "Sam Isgrove",
+    feed: "https://samisgrove.com/feed.xml"
+  }, {
+    url: "https://home.rayzhu.me",
+    name: "Ray Zhu",
+  },
 ];
 
 /**
