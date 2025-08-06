@@ -5,6 +5,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Matcha Search</title>
+  
+  <!-- PWA Configuration -->
+  <meta name="theme-color" content="#90a955">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Matcha Search">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     * {
@@ -789,7 +799,7 @@
   </div>
 
   <div id="loaderContainer" class="loader-container">
-    <img src="matcha.gif" alt="Loading..." class="matcha-loader">
+    <img src="../matcha.gif" alt="Loading..." class="matcha-loader">
     <div id="statusText" class="status-text">Loading embedding model...</div>
   </div>
 
@@ -1012,6 +1022,19 @@
       originalOpenSettings();
       setTimeout(updateCacheInfo, 100);
     };
+
+    // Register service worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/search/sw.js')
+          .then((registration) => {
+            console.log('SW registered: ', registration);
+          })
+          .catch((registrationError) => {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
   </script>
 </body>
 

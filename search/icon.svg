@@ -1,0 +1,16 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background square -->
+  <rect x="0" y="0" width="512" height="512" fill="#90a955"/>
+  
+  <!-- Steam lines with better spacing from the bowl -->
+  <path d="M220 140 Q225 120 220 100 Q215 80 220 60" stroke="#f0f6ea" stroke-width="8" fill="none" opacity="0.8"/>
+  <path d="M256 130 Q261 110 256 90 Q251 70 256 50" stroke="#f0f6ea" stroke-width="8" fill="none" opacity="0.8"/>
+  <path d="M292 140 Q287 120 292 100 Q297 80 292 80" stroke="#f0f6ea" stroke-width="8" fill="none" opacity="0.8"/>
+  
+  <!-- Magnifying glass lens - centered -->
+  <circle cx="256" cy="256" r="100" fill="#f0f6ea" stroke="#2d5016" stroke-width="12"/>
+  <circle cx="256" cy="256" r="70" fill="#6b8e23"/>
+  
+  <!-- Magnifying glass handle -->
+  <line x1="336" y1="336" x2="416" y2="416" stroke="#2d5016" stroke-width="24" stroke-linecap="round"/>
+</svg>
