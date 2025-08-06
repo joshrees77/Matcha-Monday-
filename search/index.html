@@ -511,11 +511,12 @@
 
       isLoadingModel = true;
       loadingStartTime = Date.now();
+      let isFromCache = false;
 
       const updateTimer = () => {
         const elapsed = Math.floor((Date.now() - loadingStartTime) / 1000);
-        const statusDiv = document.getElementById('status');
-        if (statusDiv && !statusDiv.textContent.includes('Downloading')) {
+        const statusDiv = document.getElementById('statusText');
+        if (statusDiv && !statusDiv.textContent.includes('Downloading') && !statusDiv.textContent.includes('Loading from cache')) {
           statusDiv.textContent = `Loading model: ${elapsed}s`;
         }
       };
@@ -529,16 +530,21 @@
           dtype: 'q8',
           progress_callback: (progress) => {
             const elapsed = Math.floor((Date.now() - loadingStartTime) / 1000);
-            const statusDiv = document.getElementById('status');
+            const statusDiv = document.getElementById('statusText');
             if (progress.status === 'download') {
               if (statusDiv) {
                 statusDiv.textContent = `Downloading ${progress.name}: ${elapsed}s`;
+              }
+            } else if (progress.status === 'ready') {
+              isFromCache = elapsed < 2; // If very fast, likely from cache
+              if (statusDiv && isFromCache) {
+                statusDiv.textContent = `Loading from cache: ${elapsed}s`;
               }
             }
           }
         });
         window.embedder = embedder;
-        console.log(`Embedding model loaded: ${modelId}`);
+        console.log(`Embedding model loaded: ${modelId}${isFromCache ? ' (from cache)' : ''}`);
         return embedder;
       } finally {
         isLoadingModel = false;
@@ -1037,9 +1043,9 @@
       <div class="cache-management">
         <div class="model-controls">
           <label>Cache:</label>
-          <button onclick="clearCacheAndReload()" id="clearCacheButton">Clear Cache</button>
-          <span id="cacheInfo" style="font-size: 12px; color: #666; margin-left: 10px;"></span>
+          <button onclick="clearAllCaches()" id="clearAllButton">Clear Cache</button>
         </div>
+        <div id="cacheInfo" style="font-size: 12px; color: #666; margin-top: 10px; line-height: 1.4;"></div>
       </div>
     </div>
   </div>
@@ -1072,6 +1078,8 @@
         window.saveModelPreference(modelSelect.value);
       }
     };
+
+
 
     window.reloadModel = async () => {
       const searchInput = document.getElementById('searchInput');
@@ -1198,28 +1206,97 @@
       }
     });
 
-    window.clearCacheAndReload = () => {
-      if (confirm('This will clear all cached articles and reload the page. Continue?')) {
+
+
+    // Cache management with service worker communication
+    window.getCacheInfo = async () => {
+      if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+        return null;
+      }
+
+      return new Promise((resolve) => {
+        const messageChannel = new MessageChannel();
+        messageChannel.port1.onmessage = (event) => {
+          if (event.data.type === 'CACHE_INFO') {
+            resolve(event.data.data);
+          }
+        };
+        
+        navigator.serviceWorker.controller.postMessage(
+          { type: 'GET_CACHE_INFO' },
+          [messageChannel.port2]
+        );
+      });
+    };
+
+
+
+    window.clearAllCaches = async () => {
+      if (confirm('This will clear all cached data and reload the page. Continue?')) {
+        // Clear localStorage
         window.clearCache();
-        location.reload();
+        
+        // Clear service worker caches if available
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+          const messageChannel = new MessageChannel();
+          messageChannel.port1.onmessage = (event) => {
+            if (event.data.type === 'ALL_CACHE_CLEARED') {
+              location.reload();
+            }
+          };
+          
+          navigator.serviceWorker.controller.postMessage(
+            { type: 'CLEAR_ALL_CACHE' },
+            [messageChannel.port2]
+          );
+        } else {
+          // Fallback if service worker not available
+          location.reload();
+        }
       }
     };
 
-    window.updateCacheInfo = () => {
+    window.formatBytes = (bytes) => {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    };
+
+    window.updateCacheInfo = async () => {
       const cacheInfo = document.getElementById('cacheInfo');
+      
       if (cacheInfo) {
         try {
+          // LocalStorage cache info
           const cached = localStorage.getItem(window.CACHE_KEY);
+          let dataInfo = '';
           if (cached) {
             const data = JSON.parse(cached);
             const itemCount = Object.keys(data.articles || {}).length;
             const size = (new Blob([cached]).size / 1024).toFixed(1);
-            cacheInfo.textContent = `${itemCount} articles cached (${size}KB)`;
+            dataInfo = `Articles: ${itemCount} (${size}KB)`;
           } else {
-            cacheInfo.textContent = 'No cache';
+            dataInfo = 'Articles: None cached';
+          }
+
+          // Service Worker cache info
+          const swCacheInfo = await getCacheInfo();
+          if (swCacheInfo) {
+            const modelSize = formatBytes(swCacheInfo.models.size);
+            const totalSize = formatBytes(swCacheInfo.total.size);
+            
+            cacheInfo.innerHTML = `
+              ${dataInfo}<br>
+              Models: ${swCacheInfo.models.count} files (${modelSize})<br>
+              Total Storage: ${totalSize}
+            `;
+          } else {
+            cacheInfo.textContent = dataInfo;
           }
         } catch (error) {
-          cacheInfo.textContent = 'Cache error';
+          cacheInfo.textContent = 'Error reading cache info';
         }
       }
     };
