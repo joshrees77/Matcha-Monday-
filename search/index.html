@@ -121,6 +121,7 @@
       padding: 0;
       width: 20px;
       height: 20px;
+      display: none; /* Hide on all devices - use outside click to close */
     }
 
     .close-button:hover {
@@ -629,9 +630,10 @@
         // Strip HTML tags from description if it contains them
         let cleanDescription = description;
         if (description.includes('<')) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = description;
-          cleanDescription = tempDiv.textContent || tempDiv.innerText || '';
+          // Use DOMParser to safely parse HTML without triggering resource loads
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(description, 'text/html');
+          cleanDescription = doc.body?.textContent || doc.body?.innerText || '';
         }
 
         console.log("Processing new article:", title.substring(0, 60) + "...");
