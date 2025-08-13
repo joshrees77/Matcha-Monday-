@@ -98,6 +98,11 @@ footer {
   margin-top: 10ch;
 }
 
+footer img {
+  display: block;
+  margin: 0 auto 10px auto;
+}
+
 .achievements-grid {
   display: flex;
   flex-wrap: wrap;
