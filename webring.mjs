@@ -40,7 +40,7 @@ const RING = [
   },
   {
     url: "https://lilybui.com",
-    name: "Lily Bui",
+    name: "Lily Bui"
   }
 ];
 
