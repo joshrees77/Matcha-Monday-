@@ -1,9 +1,3 @@
-# 🧾 Matcha Monday Website
+# 🍵 Matcha Monday Webring
 
-This is the landing page for the Matcha Monday community meetup at Parami Cafe in Sydney.
-
-## 🌱 What is Matcha Monday?
-
-We meet every Monday at 8am to share ideas, projects, and matcha. Builders, founders, artists, and curious minds welcome.
-
-🧃 First matcha’s on you!
+This is the repository for the Matcha Monday Webring. Please visit [our website](https://matchamonday.net) for more details.
