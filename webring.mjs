@@ -41,6 +41,10 @@ const RING = [
   {
     url: "https://lilybui.com",
     name: "Lily Bui"
+  },
+  {
+    url: "https://marcishak.xyz/supersecretpage",
+    name: "Marc Ishak"
   }
 ];
 
